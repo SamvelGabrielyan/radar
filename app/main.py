@@ -2,11 +2,11 @@ import shutil
 from datetime import datetime, date
 from typing import Optional
 
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Query
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, func, desc, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db import create_tables, get_db
@@ -14,14 +14,14 @@ from models.mention import Company, Mention, SentimentEnum
 from models.person import Person, PersonResult
 
 
-# ─── Lifespan (replaces deprecated on_event) ─────────────────────────────────
+# ─── Lifespan ─────────────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app):
     await create_tables()
     yield
 
-app = FastAPI(title="Radar API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Radar API", version="0.2.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -137,30 +137,94 @@ async def trigger_parse(company_id: int, db: AsyncSession = Depends(get_db)):
 async def get_mentions(
     company_id: int,
     sentiment: Optional[str] = None,
-    limit: int = 50,
+    source: Optional[str] = Query(None, description="Фильтр по источнику"),
+    date_from: Optional[str] = Query(None, description="Начало периода (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(None, description="Конец периода (YYYY-MM-DD)"),
+    limit: int = 100,
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Возвращает упоминания с поддержкой фильтрации по:
+    - sentiment: positive / neutral / negative
+    - source: название источника (Google News RU, Bing News, etc.)
+    - date_from / date_to: диапазон дат (по published_at, фоллбэк на fetched_at)
+    """
     query = (
         select(Mention)
         .where(Mention.company_id == company_id)
         .order_by(desc(Mention.fetched_at))
         .limit(limit).offset(offset)
     )
+
     if sentiment:
         query = query.where(Mention.sentiment == sentiment)
+
+    if source:
+        query = query.where(Mention.source == source)
+
+    # Фильтрация по дате — используем published_at, если он null — fetched_at
+    if date_from:
+        try:
+            dt_from = datetime.fromisoformat(date_from)
+            query = query.where(
+                func.coalesce(Mention.published_at, Mention.fetched_at) >= dt_from
+            )
+        except ValueError:
+            raise HTTPException(400, "Неверный формат date_from. Используйте YYYY-MM-DD")
+
+    if date_to:
+        try:
+            # Добавляем 1 день чтобы включить конец дня
+            dt_to = datetime.fromisoformat(date_to).replace(hour=23, minute=59, second=59)
+            query = query.where(
+                func.coalesce(Mention.published_at, Mention.fetched_at) <= dt_to
+            )
+        except ValueError:
+            raise HTTPException(400, "Неверный формат date_to. Используйте YYYY-MM-DD")
+
     result = await db.execute(query)
     return result.scalars().all()
 
 
 @app.get("/companies/{company_id}/stats", response_model=StatsOut)
-async def get_stats(company_id: int, db: AsyncSession = Depends(get_db)):
+async def get_stats(
+    company_id: int,
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Возвращает статистику с возможностью ограничить по датам.
+    Если указаны date_from / date_to — считает статистику только за этот период.
+    """
+    # Базовый фильтр: по company_id
+    base_filters = [Mention.company_id == company_id]
+
+    # Добавляем фильтры по датам если указаны
+    if date_from:
+        try:
+            dt_from = datetime.fromisoformat(date_from)
+            base_filters.append(
+                func.coalesce(Mention.published_at, Mention.fetched_at) >= dt_from
+            )
+        except ValueError:
+            pass
+
+    if date_to:
+        try:
+            dt_to = datetime.fromisoformat(date_to).replace(hour=23, minute=59, second=59)
+            base_filters.append(
+                func.coalesce(Mention.published_at, Mention.fetched_at) <= dt_to
+            )
+        except ValueError:
+            pass
+
     counts = {}
     for sent in ["positive", "neutral", "negative"]:
         r = await db.execute(
             select(func.count(Mention.id)).where(
-                Mention.company_id == company_id,
-                Mention.sentiment == sent,
+                and_(*base_filters, Mention.sentiment == sent)
             )
         )
         counts[sent] = r.scalar() or 0
@@ -169,7 +233,7 @@ async def get_stats(company_id: int, db: AsyncSession = Depends(get_db)):
 
     sources_r = await db.execute(
         select(Mention.source, func.count(Mention.id))
-        .where(Mention.company_id == company_id)
+        .where(and_(*base_filters))
         .group_by(Mention.source)
         .order_by(desc(func.count(Mention.id)))
     )
