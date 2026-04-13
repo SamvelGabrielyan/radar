@@ -11,7 +11,10 @@ from textblob import TextBlob
 
 from config import settings
 
-# Набор User-Agent для ротации — снижает вероятность блокировки
+# ─── Ротация User-Agent ──────────────────────────────────────────────────────
+# Набор из 5 реалистичных UA-строк, чтобы источники не палили бота
+# по одинаковому отпечатку. При каждом запросе выбирается случайный.
+
 USER_AGENTS = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -25,12 +28,11 @@ def _random_ua() -> str:
     return random.choice(USER_AGENTS)
 
 
+# ─── Источники ────────────────────────────────────────────────────────────────
+# Раньше был только Google News — теперь добавлен Bing News RSS.
+# Если Google заблокирует, Bing компенсирует (и наоборот).
+
 def build_sources(keyword: str) -> list[dict]:
-    """
-    Строит список RSS-источников для данного ключевого слова.
-    Теперь включает Google News (RU/EN), Bing News и DuckDuckGo News —
-    если один источник заблокирует запрос, другие компенсируют.
-    """
     encoded = quote_plus(keyword)
     return [
         {
@@ -45,12 +47,10 @@ def build_sources(keyword: str) -> list[dict]:
             "name": "Bing News",
             "url": f"https://www.bing.com/news/search?q={encoded}&format=rss",
         },
-        {
-            "name": "DuckDuckGo",
-            "url": f"https://duckduckgo.com/?q={encoded}&t=h_&iar=news&ia=news&format=rss",
-        },
     ]
 
+
+# ─── Sentiment ────────────────────────────────────────────────────────────────
 
 def analyze_sentiment(text: str) -> tuple[str, float]:
     """Определяет тональность текста через TextBlob."""
@@ -65,11 +65,11 @@ def analyze_sentiment(text: str) -> tuple[str, float]:
         return "neutral", 0.0
 
 
+# ─── HTTP-загрузка RSS ────────────────────────────────────────────────────────
+# С ретраями и ротацией UA. Если первый запрос вернул не-200,
+# пробуем ещё раз с другим User-Agent.
+
 def fetch_rss_with_httpx(url: str, max_retries: int = 2) -> str | None:
-    """
-    Скачивает RSS через httpx с ротацией User-Agent и ретраями.
-    Если первый запрос вернул не-200, пробует ещё раз с другим UA.
-    """
     for attempt in range(max_retries):
         try:
             ua = _random_ua()
@@ -87,15 +87,17 @@ def fetch_rss_with_httpx(url: str, max_retries: int = 2) -> str | None:
         except Exception as e:
             print(f"[Parser] httpx ошибка (попытка {attempt + 1}): {e}")
 
-        # Пауза перед ретраем — с небольшой рандомизацией чтобы не палить паттерн
+        # Пауза перед ретраем с рандомизацией
         if attempt < max_retries - 1:
             time.sleep(1.5 + random.random())
 
     return None
 
 
+# ─── Извлечение даты публикации ───────────────────────────────────────────────
+# Пробуем несколько полей RSS-записи, т.к. разные ленты называют их по-разному
+
 def _extract_published_at(entry) -> datetime | None:
-    """Извлекает дату публикации из RSS-записи, пробуя несколько полей."""
     for field in ["published_parsed", "updated_parsed", "created_parsed"]:
         parsed = getattr(entry, field, None)
         if parsed:
@@ -106,30 +108,26 @@ def _extract_published_at(entry) -> datetime | None:
     return None
 
 
+# ─── Парсинг одного RSS-фида ─────────────────────────────────────────────────
+
 def parse_rss_feed(source: dict) -> list[dict]:
-    """
-    Парсит одну RSS-ленту: скачивает через httpx, если не удалось —
-    пробует feedparser напрямую. Возвращает список упоминаний.
-    """
     results = []
     try:
-        # Первый способ: httpx + feedparser.parse(строка)
+        # Сначала пробуем httpx, потом feedparser напрямую
         raw_xml = fetch_rss_with_httpx(source["url"])
         if raw_xml:
             feed = feedparser.parse(raw_xml)
         else:
-            # Фоллбэк: feedparser сам делает HTTP-запрос
             feedparser.USER_AGENT = _random_ua()
             feed = feedparser.parse(source["url"])
 
         entry_count = len(feed.entries)
         print(f"[Parser] {source['name']}: {entry_count} записей")
 
-        # Если RSS пуст — возможно источник заблокировал, это нормально
         if entry_count == 0 and feed.bozo:
-            print(f"[Parser] {source['name']}: ошибка парсинга RSS — {feed.bozo_exception}")
+            print(f"[Parser] {source['name']}: ошибка RSS — {feed.bozo_exception}")
 
-        for entry in feed.entries[:25]:  # Берём до 25 записей на источник
+        for entry in feed.entries[:25]:
             title = entry.get("title", "").strip()
             url = entry.get("link", "").strip()
             snippet = entry.get("summary", "")
@@ -137,7 +135,7 @@ def parse_rss_feed(source: dict) -> list[dict]:
             if not title or not url:
                 continue
 
-            # Очищаем HTML-теги из сниппета
+            # Очистка HTML из сниппета
             if snippet:
                 snippet = BeautifulSoup(snippet, "lxml").get_text(" ", strip=True)[:500]
 
@@ -156,7 +154,6 @@ def parse_rss_feed(source: dict) -> list[dict]:
                 "published_at": published_at,
             })
 
-        # Задержка между запросами — чтобы не перегружать источник
         delay = settings.PARSER_DELAY + random.uniform(0.5, 1.5)
         time.sleep(delay)
 
@@ -166,11 +163,10 @@ def parse_rss_feed(source: dict) -> list[dict]:
     return results
 
 
+# ─── Главная функция ──────────────────────────────────────────────────────────
+
 def fetch_mentions(keywords: list[str]) -> list[dict]:
-    """
-    Основная функция: парсит все источники для всех ключевых слов.
-    Дедуплицирует по хешу URL, считает статистику по источникам.
-    """
+    """Парсит все источники для всех ключевых слов. Дедуплицирует по URL-хешу."""
     all_mentions = []
     seen_hashes = set()
     source_stats = {}
@@ -190,7 +186,7 @@ def fetch_mentions(keywords: list[str]) -> list[dict]:
 
             source_stats[source_name] = source_stats.get(source_name, 0) + added
 
-    # Логируем итоги по каждому источнику
+    # Итоговая статистика — сразу видно какой источник работает, а какой нет
     print(f"[Parser] === Итого: {len(all_mentions)} уникальных упоминаний ===")
     for src, count in source_stats.items():
         print(f"[Parser]   {src}: {count}")

@@ -28,7 +28,7 @@ class PersonResult(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     person_id: Mapped[int] = mapped_column(ForeignKey("persons.id"))
     source: Mapped[str] = mapped_column(String(255))
-    result_type: Mapped[str] = mapped_column(String(50))  # news / social / image / registry
+    result_type: Mapped[str] = mapped_column(String(50))
     title: Mapped[str] = mapped_column(String(500))
     url: Mapped[str] = mapped_column(String(1000))
     snippet: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

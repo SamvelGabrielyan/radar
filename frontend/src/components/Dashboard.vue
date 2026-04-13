@@ -1,7 +1,6 @@
 <template>
   <div class="dashboard">
 
-    <!-- Header -->
     <div class="header">
       <div>
         <h1>{{ company.name }}</h1>
@@ -21,7 +20,6 @@
       </div>
     </div>
 
-    <!-- Stats cards -->
     <div class="stats-grid">
       <div class="stat-card">
         <div class="stat-label">Всего упоминаний</div>
@@ -50,21 +48,15 @@
     <!-- Filters bar -->
     <div class="filters-bar card">
       <div class="filters-row">
-        <!-- Sentiment filter -->
         <div class="filter-group">
           <label class="filter-label">Тональность</label>
           <div class="filter-tabs">
-            <button
-              v-for="f in sentimentFilters"
-              :key="f.value"
-              class="filter-tab"
-              :class="{ active: activeFilter === f.value }"
-              @click="activeFilter = f.value; applyFilters()"
-            >{{ f.label }}</button>
+            <button v-for="f in sentimentFilters" :key="f.value"
+              class="filter-tab" :class="{ active: activeFilter === f.value }"
+              @click="activeFilter = f.value; applyFilters()">{{ f.label }}</button>
           </div>
         </div>
 
-        <!-- Source filter -->
         <div class="filter-group" v-if="availableSources.length">
           <label class="filter-label">Источник</label>
           <select v-model="sourceFilter" @change="applyFilters()" class="filter-select">
@@ -73,45 +65,23 @@
           </select>
         </div>
 
-        <!-- Date range filter -->
         <div class="filter-group">
           <label class="filter-label">Период</label>
           <div class="date-range">
             <div class="date-presets">
-              <button
-                v-for="p in datePresets"
-                :key="p.label"
-                class="preset-btn"
-                :class="{ active: activeDatePreset === p.label }"
-                @click="applyDatePreset(p)"
-              >{{ p.label }}</button>
+              <button v-for="p in datePresets" :key="p.label"
+                class="preset-btn" :class="{ active: activeDatePreset === p.label }"
+                @click="applyDatePreset(p)">{{ p.label }}</button>
             </div>
             <div class="date-inputs">
-              <input
-                type="date"
-                v-model="dateFrom"
-                @change="activeDatePreset = null; applyFilters()"
-                class="date-input"
-                placeholder="От"
-              />
+              <input type="date" v-model="dateFrom" @change="activeDatePreset = null; applyFilters()" class="date-input" />
               <span class="date-sep">—</span>
-              <input
-                type="date"
-                v-model="dateTo"
-                @change="activeDatePreset = null; applyFilters()"
-                class="date-input"
-                placeholder="До"
-              />
+              <input type="date" v-model="dateTo" @change="activeDatePreset = null; applyFilters()" class="date-input" />
             </div>
           </div>
         </div>
 
-        <!-- Reset button -->
-        <button
-          v-if="hasActiveFilters"
-          class="btn btn-ghost reset-btn"
-          @click="resetFilters"
-        >
+        <button v-if="hasActiveFilters" class="btn btn-ghost reset-btn" @click="resetFilters">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
           </svg>
@@ -120,7 +90,6 @@
       </div>
     </div>
 
-    <!-- Chart + Sources -->
     <div class="mid-grid">
       <div class="card chart-card">
         <div class="card-title">Тональность</div>
@@ -129,7 +98,6 @@
         </div>
         <div v-else class="no-data">Нет данных — запусти парсинг</div>
       </div>
-
       <div class="card sources-card">
         <div class="card-title">Источники</div>
         <div v-if="stats?.sources && Object.keys(stats.sources).length" class="sources-list">
@@ -145,7 +113,6 @@
       </div>
     </div>
 
-    <!-- Mentions feed -->
     <div class="card mentions-card">
       <div class="card-header">
         <div class="card-title">
@@ -159,17 +126,9 @@
       </div>
 
       <div v-else-if="mentions.length" class="mentions-list">
-        <a
-          v-for="m in mentions"
-          :key="m.id"
-          :href="m.url"
-          target="_blank"
-          class="mention-item"
-        >
+        <a v-for="m in mentions" :key="m.id" :href="m.url" target="_blank" class="mention-item">
           <div class="mention-left">
-            <span :class="['badge', `badge-${m.sentiment}`]">
-              {{ sentimentLabel(m.sentiment) }}
-            </span>
+            <span :class="['badge', `badge-${m.sentiment}`]">{{ sentimentLabel(m.sentiment) }}</span>
           </div>
           <div class="mention-body">
             <div class="mention-title">{{ m.title }}</div>
@@ -187,12 +146,8 @@
       </div>
 
       <div v-else class="no-data" style="padding: 40px 0">
-        <template v-if="hasActiveFilters">
-          По выбранным фильтрам ничего не найдено
-        </template>
-        <template v-else>
-          Упоминаний не найдено — нажми «Обновить»
-        </template>
+        <template v-if="hasActiveFilters">По выбранным фильтрам ничего не найдено</template>
+        <template v-else>Упоминаний не найдено — нажми «Обновить»</template>
       </div>
     </div>
 
@@ -200,7 +155,7 @@
 </template>
 
 <script setup>
-import { ref, watch, computed, onMounted } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { Doughnut } from 'vue-chartjs'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
 import api from '../api.js'
@@ -208,19 +163,18 @@ import api from '../api.js'
 ChartJS.register(ArcElement, Tooltip, Legend)
 
 const props = defineProps({ company: Object })
-const emit  = defineEmits(['deleted', 'refresh'])
+const emit  = defineEmits(['deleted'])
 
-const stats      = ref(null)
-const mentions   = ref([])
-const loading    = ref(false)
-const parsing    = ref(false)
+const stats    = ref(null)
+const mentions = ref([])
+const loading  = ref(false)
+const parsing  = ref(false)
 
-// ─── Фильтры ────────────────────────────────────────────────────────────────
-const activeFilter      = ref(null)    // sentiment
-const sourceFilter      = ref('')      // source name
-const dateFrom          = ref('')      // YYYY-MM-DD
-const dateTo            = ref('')      // YYYY-MM-DD
-const activeDatePreset  = ref(null)    // имя пресета для подсветки
+const activeFilter     = ref(null)
+const sourceFilter     = ref('')
+const dateFrom         = ref('')
+const dateTo           = ref('')
+const activeDatePreset = ref(null)
 
 const sentimentFilters = [
   { label: 'Все',        value: null       },
@@ -229,162 +183,86 @@ const sentimentFilters = [
   { label: 'Негатив',    value: 'negative' },
 ]
 
-// Пресеты дат — быстрый выбор периода одним кликом
 const datePresets = [
-  { label: 'Сегодня',  days: 0  },
-  { label: '7 дней',   days: 7  },
-  { label: '30 дней',  days: 30 },
-  { label: '90 дней',  days: 90 },
+  { label: 'Сегодня', days: 0  },
+  { label: '7 дней',  days: 7  },
+  { label: '30 дней', days: 30 },
+  { label: '90 дней', days: 90 },
 ]
 
-// Вычисляем список доступных источников из статистики
-const availableSources = computed(() => {
-  if (!stats.value?.sources) return []
-  return Object.keys(stats.value.sources)
-})
-
-// Проверяем есть ли активные фильтры (чтобы показать кнопку «Сбросить»)
-const hasActiveFilters = computed(() => {
-  return activeFilter.value || sourceFilter.value || dateFrom.value || dateTo.value
-})
-
+const availableSources = computed(() => stats.value?.sources ? Object.keys(stats.value.sources) : [])
+const hasActiveFilters = computed(() => activeFilter.value || sourceFilter.value || dateFrom.value || dateTo.value)
 const hasData = computed(() => stats.value && stats.value.total > 0)
 
 const chartData = computed(() => ({
   labels: ['Позитив', 'Нейтрально', 'Негатив'],
   datasets: [{
-    data: [
-      stats.value?.positive ?? 0,
-      stats.value?.neutral  ?? 0,
-      stats.value?.negative ?? 0,
-    ],
+    data: [stats.value?.positive ?? 0, stats.value?.neutral ?? 0, stats.value?.negative ?? 0],
     backgroundColor: ['#059669', '#374151', '#dc2626'],
-    borderColor:     ['#10b981', '#4b5563', '#ef4444'],
-    borderWidth: 1,
-    hoverOffset: 6,
+    borderColor: ['#10b981', '#4b5563', '#ef4444'],
+    borderWidth: 1, hoverOffset: 6,
   }]
 }))
 
 const chartOptions = {
-  responsive: true,
-  cutout: '68%',
-  plugins: {
-    legend: {
-      position: 'bottom',
-      labels: { color: '#94a3b8', font: { size: 12 }, padding: 16 }
-    }
-  }
+  responsive: true, cutout: '68%',
+  plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 12 }, padding: 16 } } }
 }
-
-// ─── Хелперы ─────────────────────────────────────────────────────────────────
 
 function barWidth(count) {
   const max = Math.max(...Object.values(stats.value?.sources || {}))
   return max ? Math.round((count / max) * 100) : 0
 }
-
-function sentimentLabel(s) {
-  return { positive: '+ позитив', neutral: '● нейтрал', negative: '– негатив' }[s] || s
-}
-
-function scoreClass(score) {
-  if (score > 0.1) return 'score-pos'
-  if (score < -0.1) return 'score-neg'
-  return 'score-neu'
-}
-
+function sentimentLabel(s) { return { positive: '+ позитив', neutral: '● нейтрал', negative: '– негатив' }[s] || s }
+function scoreClass(score) { return score > 0.1 ? 'score-pos' : score < -0.1 ? 'score-neg' : 'score-neu' }
 function formatDate(str) {
   if (!str) return ''
-  const d = new Date(str)
-  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+  return new Date(str).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
-
-function toISODate(d) {
-  // Форматирует Date объект в YYYY-MM-DD строку
-  return d.toISOString().split('T')[0]
-}
-
-// ─── Применение фильтров ─────────────────────────────────────────────────────
+function toISODate(d) { return d.toISOString().split('T')[0] }
 
 function buildFilters() {
   return {
-    sentiment:  activeFilter.value || undefined,
-    source:     sourceFilter.value || undefined,
-    date_from:  dateFrom.value || undefined,
-    date_to:    dateTo.value || undefined,
+    sentiment: activeFilter.value || undefined,
+    source:    sourceFilter.value || undefined,
+    date_from: dateFrom.value || undefined,
+    date_to:   dateTo.value || undefined,
   }
 }
 
 async function applyFilters() {
   loading.value = true
   try {
-    const filters = buildFilters()
-    const [s, m] = await Promise.all([
-      api.getStats(props.company.id, filters),
-      api.getMentions(props.company.id, filters, 100),
-    ])
-    stats.value    = s
+    const f = buildFilters()
+    const [s, m] = await Promise.all([api.getStats(props.company.id, f), api.getMentions(props.company.id, f, 100)])
+    stats.value = s
     mentions.value = m
-  } catch(e) {
-    console.error('Ошибка загрузки:', e)
-  } finally {
-    loading.value = false
-  }
+  } catch(e) { console.error(e) }
+  finally { loading.value = false }
 }
 
 function applyDatePreset(preset) {
   activeDatePreset.value = preset.label
   dateTo.value = toISODate(new Date())
-
-  if (preset.days === 0) {
-    // «Сегодня» — от и до сегодняшней даты
-    dateFrom.value = toISODate(new Date())
-  } else {
-    const from = new Date()
-    from.setDate(from.getDate() - preset.days)
-    dateFrom.value = toISODate(from)
-  }
-
+  if (preset.days === 0) { dateFrom.value = toISODate(new Date()) }
+  else { const from = new Date(); from.setDate(from.getDate() - preset.days); dateFrom.value = toISODate(from) }
   applyFilters()
 }
 
 function resetFilters() {
-  activeFilter.value     = null
-  sourceFilter.value     = ''
-  dateFrom.value         = ''
-  dateTo.value           = ''
-  activeDatePreset.value = null
+  activeFilter.value = null; sourceFilter.value = ''; dateFrom.value = ''; dateTo.value = ''; activeDatePreset.value = null
   applyFilters()
-}
-
-// ─── Загрузка данных ─────────────────────────────────────────────────────────
-
-async function load() {
-  // Сбрасываем фильтры при переключении компании
-  activeFilter.value     = null
-  sourceFilter.value     = ''
-  dateFrom.value         = ''
-  dateTo.value           = ''
-  activeDatePreset.value = null
-  await applyFilters()
 }
 
 async function triggerParse() {
   parsing.value = true
   try {
     const { task_id } = await api.parseMentions(props.company.id)
-    // Поллинг статуса задачи каждые 2 секунды
     const poll = setInterval(async () => {
       const t = await api.getTaskStatus(task_id)
-      if (t.status === 'SUCCESS' || t.status === 'FAILURE') {
-        clearInterval(poll)
-        parsing.value = false
-        await applyFilters()  // перезагружаем с текущими фильтрами
-      }
+      if (t.status === 'SUCCESS' || t.status === 'FAILURE') { clearInterval(poll); parsing.value = false; await applyFilters() }
     }, 2000)
-  } catch {
-    parsing.value = false
-  }
+  } catch { parsing.value = false }
 }
 
 async function remove() {
@@ -393,238 +271,76 @@ async function remove() {
   emit('deleted', props.company.id)
 }
 
-// При смене компании — перезагружаем всё
-watch(() => props.company?.id, load, { immediate: true })
+watch(() => props.company?.id, () => {
+  activeFilter.value = null; sourceFilter.value = ''; dateFrom.value = ''; dateTo.value = ''; activeDatePreset.value = null
+  applyFilters()
+}, { immediate: true })
 </script>
 
 <style scoped>
 .dashboard { padding: 28px; display: flex; flex-direction: column; gap: 20px; }
-
-.header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
+.header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
 .keywords { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.kw-tag {
-  background: #1e2235;
-  border: 1px solid #2d3148;
-  border-radius: 20px;
-  padding: 2px 10px;
-  font-size: 11px;
-  color: #94a3b8;
-}
+.kw-tag { background: #1e2235; border: 1px solid #2d3148; border-radius: 20px; padding: 2px 10px; font-size: 11px; color: #94a3b8; }
 .header-actions { display: flex; gap: 8px; flex-shrink: 0; }
-
-/* ─── Stats ─────────────────────────────────────────────────────────────── */
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-}
-.stat-card {
-  background: #1a1d27;
-  border: 1px solid #2d3148;
-  border-radius: 12px;
-  padding: 16px 20px;
-}
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.stat-card { background: #1a1d27; border: 1px solid #2d3148; border-radius: 12px; padding: 16px 20px; }
 .stat-card.positive { border-color: #064e3b; }
 .stat-card.neutral  { border-color: #2d3148; }
 .stat-card.negative { border-color: #7f1d1d; }
 .stat-label { font-size: 12px; color: #64748b; margin-bottom: 8px; }
-.stat-value {
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
+.stat-value { font-size: 28px; font-weight: 700; letter-spacing: -0.03em; display: flex; align-items: baseline; gap: 6px; }
 .stat-pct { font-size: 13px; font-weight: 400; color: #64748b; }
 .positive .stat-value { color: #34d399; }
 .negative .stat-value { color: #f87171; }
-
-/* ─── Filters ───────────────────────────────────────────────────────────── */
-
-.filters-bar {
-  padding: 16px 20px;
-}
-
-.filters-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 20px;
-  flex-wrap: wrap;
-}
-
-.filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.filter-label {
-  font-size: 11px;
-  color: #64748b;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
+.filters-bar { padding: 16px 20px; }
+.filters-row { display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap; }
+.filter-group { display: flex; flex-direction: column; gap: 6px; }
+.filter-label { font-size: 11px; color: #64748b; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
 .filter-tabs { display: flex; gap: 4px; }
-.filter-tab {
-  padding: 5px 12px;
-  border-radius: 6px;
-  background: transparent;
-  border: 1px solid #2d3148;
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s;
-}
+.filter-tab { padding: 5px 12px; border-radius: 6px; background: transparent; border: 1px solid #2d3148; color: #64748b; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s; }
 .filter-tab:hover { color: #e2e8f0; border-color: #4a5568; }
 .filter-tab.active { background: #1e2235; color: #e2e8f0; border-color: #6366f1; }
-
-.filter-select {
-  background: #0f1117;
-  border: 1px solid #2d3148;
-  border-radius: 6px;
-  color: #e2e8f0;
-  font-size: 12px;
-  padding: 5px 10px;
-  outline: none;
-  cursor: pointer;
-  min-width: 140px;
-}
+.filter-select { background: #0f1117; border: 1px solid #2d3148; border-radius: 6px; color: #e2e8f0; font-size: 12px; padding: 5px 10px; outline: none; cursor: pointer; min-width: 140px; }
 .filter-select:focus { border-color: #6366f1; }
-
-.date-range {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.date-presets {
-  display: flex;
-  gap: 4px;
-}
-
-.preset-btn {
-  padding: 5px 10px;
-  border-radius: 6px;
-  background: transparent;
-  border: 1px solid #2d3148;
-  color: #64748b;
-  font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s;
-  white-space: nowrap;
-}
+.date-range { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.date-presets { display: flex; gap: 4px; }
+.preset-btn { padding: 5px 10px; border-radius: 6px; background: transparent; border: 1px solid #2d3148; color: #64748b; font-size: 11px; font-weight: 500; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
 .preset-btn:hover { color: #e2e8f0; border-color: #4a5568; }
 .preset-btn.active { background: #1e2235; color: #e2e8f0; border-color: #6366f1; }
-
-.date-inputs {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.date-input {
-  background: #0f1117;
-  border: 1px solid #2d3148;
-  border-radius: 6px;
-  color: #e2e8f0;
-  font-size: 12px;
-  padding: 4px 8px;
-  outline: none;
-  width: 130px;
-  font-family: 'Inter', sans-serif;
-}
+.date-inputs { display: flex; align-items: center; gap: 6px; }
+.date-input { background: #0f1117; border: 1px solid #2d3148; border-radius: 6px; color: #e2e8f0; font-size: 12px; padding: 4px 8px; outline: none; width: 130px; font-family: 'Inter', sans-serif; }
 .date-input:focus { border-color: #6366f1; }
-/* Стилизация нативного date picker для тёмной темы */
-.date-input::-webkit-calendar-picker-indicator {
-  filter: invert(0.7);
-  cursor: pointer;
-}
-
-.date-sep {
-  color: #4a5568;
-  font-size: 12px;
-}
-
-.reset-btn {
-  padding: 5px 12px;
-  font-size: 12px;
-  margin-left: auto;
-  align-self: flex-end;
-}
-
-/* ─── Mid grid (chart + sources) ────────────────────────────────────────── */
-
+.date-input::-webkit-calendar-picker-indicator { filter: invert(0.7); cursor: pointer; }
+.date-sep { color: #4a5568; font-size: 12px; }
+.reset-btn { padding: 5px 12px; font-size: 12px; margin-left: auto; align-self: flex-end; }
 .mid-grid { display: grid; grid-template-columns: 280px 1fr; gap: 12px; }
-
 .chart-card { display: flex; flex-direction: column; gap: 16px; }
 .chart-wrap { max-width: 240px; margin: 0 auto; }
-.card-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #94a3b8;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.mention-count {
-  background: #1e2235;
-  color: #6366f1;
-  font-size: 11px;
-  padding: 1px 7px;
-  border-radius: 10px;
-}
+.card-title { font-size: 13px; font-weight: 600; color: #94a3b8; display: flex; align-items: center; gap: 8px; }
+.mention-count { background: #1e2235; color: #6366f1; font-size: 11px; padding: 1px 7px; border-radius: 10px; }
 .no-data { color: #4a5568; font-size: 13px; padding: 20px 0; text-align: center; }
-
 .sources-list { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; }
 .source-row { display: flex; align-items: center; gap: 10px; font-size: 12px; }
 .source-name { color: #94a3b8; min-width: 130px; }
 .source-bar-wrap { flex: 1; height: 6px; background: #2d3148; border-radius: 3px; overflow: hidden; }
 .source-bar { height: 100%; background: #6366f1; border-radius: 3px; transition: width 0.4s; }
 .source-count { color: #64748b; min-width: 28px; text-align: right; }
-
-/* ─── Mentions ──────────────────────────────────────────────────────────── */
-
 .mentions-card { display: flex; flex-direction: column; gap: 16px; }
 .card-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
-
 .mentions-loading { display: flex; justify-content: center; padding: 40px 0; }
-
 .mentions-list { display: flex; flex-direction: column; gap: 0; }
-.mention-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  padding: 14px 0;
-  border-bottom: 1px solid #1e2235;
-  text-decoration: none;
-  transition: background 0.1s;
-  cursor: pointer;
-}
+.mention-item { display: flex; align-items: flex-start; gap: 14px; padding: 14px 0; border-bottom: 1px solid #1e2235; text-decoration: none; transition: background 0.1s; cursor: pointer; }
 .mention-item:last-child { border-bottom: none; }
 .mention-item:hover { background: #1e2235; margin: 0 -20px; padding: 14px 20px; border-radius: 8px; }
-
 .mention-left { padding-top: 2px; flex-shrink: 0; }
 .mention-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .mention-title { font-size: 13px; font-weight: 500; color: #e2e8f0; line-height: 1.4; }
 .mention-meta { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #4a5568; }
 .mention-source { color: #6366f1; }
 .mention-dot { color: #2d3148; }
-.mention-snippet { font-size: 12px; color: #64748b; line-height: 1.5; margin-top: 2px;
-  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-
+.mention-snippet { font-size: 12px; color: #64748b; line-height: 1.5; margin-top: 2px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .mention-score { font-size: 12px; font-weight: 600; flex-shrink: 0; padding-top: 2px; min-width: 40px; text-align: right; }
 .score-pos { color: #34d399; }
 .score-neg { color: #f87171; }

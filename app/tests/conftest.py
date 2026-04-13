@@ -9,7 +9,7 @@ from models.mention import Base
 import models.mention
 import models.person
 
-# Используем SQLite в памяти для тестов — быстро и без зависимостей
+# SQLite в памяти — быстро и без внешних зависимостей
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
 

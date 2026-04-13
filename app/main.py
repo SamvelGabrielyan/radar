@@ -94,7 +94,33 @@ class PersonResultOut(BaseModel):
     fetched_at: datetime
 
 
-# ─── Companies ────────────────────────────────────────────────────────────────
+# ─── Helpers: date-фильтры ────────────────────────────────────────────────────
+# Вынесены в отдельную функцию, т.к. используются и в mentions, и в stats.
+# Используем coalesce(published_at, fetched_at): если у упоминания есть
+# дата публикации — фильтруем по ней, иначе по дате сбора.
+
+def _parse_date_filters(date_from: str | None, date_to: str | None) -> list:
+    filters = []
+    date_col = func.coalesce(Mention.published_at, Mention.fetched_at)
+
+    if date_from:
+        try:
+            dt_from = datetime.fromisoformat(date_from)
+            filters.append(date_col >= dt_from)
+        except ValueError:
+            raise HTTPException(400, "Неверный формат date_from. Используйте YYYY-MM-DD")
+
+    if date_to:
+        try:
+            dt_to = datetime.fromisoformat(date_to).replace(hour=23, minute=59, second=59)
+            filters.append(date_col <= dt_to)
+        except ValueError:
+            raise HTTPException(400, "Неверный формат date_to. Используйте YYYY-MM-DD")
+
+    return filters
+
+
+# ─── Companies CRUD ───────────────────────────────────────────────────────────
 
 @app.post("/companies", response_model=CompanyOut)
 async def create_company(data: CompanyCreate, db: AsyncSession = Depends(get_db)):
@@ -133,6 +159,8 @@ async def trigger_parse(company_id: int, db: AsyncSession = Depends(get_db)):
     return {"task_id": task.id, "status": "queued"}
 
 
+# ─── Mentions: теперь с date_from, date_to и source ──────────────────────────
+
 @app.get("/companies/{company_id}/mentions", response_model=list[MentionOut])
 async def get_mentions(
     company_id: int,
@@ -144,12 +172,6 @@ async def get_mentions(
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Возвращает упоминания с поддержкой фильтрации по:
-    - sentiment: positive / neutral / negative
-    - source: название источника (Google News RU, Bing News, etc.)
-    - date_from / date_to: диапазон дат (по published_at, фоллбэк на fetched_at)
-    """
     query = (
         select(Mention)
         .where(Mention.company_id == company_id)
@@ -159,33 +181,17 @@ async def get_mentions(
 
     if sentiment:
         query = query.where(Mention.sentiment == sentiment)
-
     if source:
         query = query.where(Mention.source == source)
 
-    # Фильтрация по дате — используем published_at, если он null — fetched_at
-    if date_from:
-        try:
-            dt_from = datetime.fromisoformat(date_from)
-            query = query.where(
-                func.coalesce(Mention.published_at, Mention.fetched_at) >= dt_from
-            )
-        except ValueError:
-            raise HTTPException(400, "Неверный формат date_from. Используйте YYYY-MM-DD")
-
-    if date_to:
-        try:
-            # Добавляем 1 день чтобы включить конец дня
-            dt_to = datetime.fromisoformat(date_to).replace(hour=23, minute=59, second=59)
-            query = query.where(
-                func.coalesce(Mention.published_at, Mention.fetched_at) <= dt_to
-            )
-        except ValueError:
-            raise HTTPException(400, "Неверный формат date_to. Используйте YYYY-MM-DD")
+    for f in _parse_date_filters(date_from, date_to):
+        query = query.where(f)
 
     result = await db.execute(query)
     return result.scalars().all()
 
+
+# ─── Stats: теперь тоже с date range ─────────────────────────────────────────
 
 @app.get("/companies/{company_id}/stats", response_model=StatsOut)
 async def get_stats(
@@ -194,31 +200,8 @@ async def get_stats(
     date_to: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Возвращает статистику с возможностью ограничить по датам.
-    Если указаны date_from / date_to — считает статистику только за этот период.
-    """
-    # Базовый фильтр: по company_id
     base_filters = [Mention.company_id == company_id]
-
-    # Добавляем фильтры по датам если указаны
-    if date_from:
-        try:
-            dt_from = datetime.fromisoformat(date_from)
-            base_filters.append(
-                func.coalesce(Mention.published_at, Mention.fetched_at) >= dt_from
-            )
-        except ValueError:
-            pass
-
-    if date_to:
-        try:
-            dt_to = datetime.fromisoformat(date_to).replace(hour=23, minute=59, second=59)
-            base_filters.append(
-                func.coalesce(Mention.published_at, Mention.fetched_at) <= dt_to
-            )
-        except ValueError:
-            pass
+    base_filters.extend(_parse_date_filters(date_from, date_to))
 
     counts = {}
     for sent in ["positive", "neutral", "negative"]:

@@ -52,15 +52,28 @@ curl -X POST http://localhost:8000/companies/1/parse
 curl http://localhost:8000/tasks/{task_id}
 ```
 
-### Посмотреть упоминания
+### Посмотреть упоминания (с фильтрами)
 ```bash
+# Все упоминания
 curl http://localhost:8000/companies/1/mentions
+
+# Только негативные
 curl http://localhost:8000/companies/1/mentions?sentiment=negative
+
+# По источнику
+curl http://localhost:8000/companies/1/mentions?source=Bing+News
+
+# За последние 7 дней
+curl "http://localhost:8000/companies/1/mentions?date_from=2025-06-01&date_to=2025-06-08"
+
+# Комбинация фильтров
+curl "http://localhost:8000/companies/1/mentions?sentiment=negative&source=Google+News+RU&date_from=2025-06-01"
 ```
 
-### Статистика
+### Статистика (с date range)
 ```bash
 curl http://localhost:8000/companies/1/stats
+curl "http://localhost:8000/companies/1/stats?date_from=2025-06-01&date_to=2025-06-30"
 ```
 
 ### Swagger UI (интерактивная документация)
@@ -85,6 +98,8 @@ docker-compose
 - Bing News RSS
 
 Для каждого упоминания определяет тональность (positive / neutral / negative) через TextBlob.
+
+Парсер использует ротацию User-Agent (5 вариантов) и ретраи с рандомизированной задержкой для устойчивости к блокировкам.
 
 ## Следующие шаги
 

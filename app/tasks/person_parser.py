@@ -98,7 +98,6 @@ def _yandex_reverse_search(image_data: bytes) -> list[dict]:
     results = []
     try:
         with httpx.Client(timeout=30, follow_redirects=True) as client:
-            # Загружаем фото в Yandex Images
             upload = client.post(
                 "https://yandex.ru/images/search",
                 files={"upfile": ("photo.jpg", image_data, "image/jpeg")},
@@ -108,8 +107,6 @@ def _yandex_reverse_search(image_data: bytes) -> list[dict]:
 
             if upload.status_code in (200, 302):
                 soup = BeautifulSoup(upload.text, "lxml")
-
-                # Ищем найденные страницы
                 for item in soup.select(".serp-item")[:15]:
                     title_el = item.select_one(".serp-item__title, .organic__title")
                     url_el   = item.select_one("a[href]")
@@ -179,13 +176,12 @@ def _bing_reverse_search(image_data: bytes) -> list[dict]:
     return results
 
 
-# ─── Reverse Image Search: Google (через URL загрузки) ───────────────────────
+# ─── Reverse Image Search: Google ────────────────────────────────────────────
 
 def _google_reverse_search(image_data: bytes) -> list[dict]:
     results = []
     try:
         with httpx.Client(timeout=30, follow_redirects=True) as client:
-            # Загружаем в Google Lens
             upload = client.post(
                 "https://lens.google.com/upload",
                 files={"encoded_image": ("photo.jpg", image_data, "image/jpeg")},
@@ -222,10 +218,6 @@ def _google_reverse_search(image_data: bytes) -> list[dict]:
 # ─── Главная функция поиска по фото ──────────────────────────────────────────
 
 def reverse_image_search(photo_path: str) -> list[dict]:
-    """
-    Пробует все три сервиса: Yandex, Bing, Google Lens.
-    Возвращает объединённые результаты.
-    """
     path = Path(photo_path)
     if not path.exists():
         print(f"[ImageSearch] Файл не найден: {photo_path}")
@@ -237,7 +229,6 @@ def reverse_image_search(photo_path: str) -> list[dict]:
     all_results = []
     seen_urls = set()
 
-    # Пробуем все три сервиса
     for search_fn in [_yandex_reverse_search, _bing_reverse_search, _google_reverse_search]:
         try:
             for r in search_fn(image_data):
@@ -247,7 +238,6 @@ def reverse_image_search(photo_path: str) -> list[dict]:
         except Exception as e:
             print(f"[ImageSearch] Ошибка: {e}")
 
-    # Если ни один сервис не дал результатов — возвращаем ссылки на ручной поиск
     if not all_results:
         print("[ImageSearch] Автопоиск не дал результатов, добавляем ручные ссылки")
         all_results = [

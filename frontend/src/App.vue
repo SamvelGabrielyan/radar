@@ -12,7 +12,6 @@
         <span>Radar</span>
       </div>
 
-      <!-- Переключатель разделов -->
       <div class="section-tabs">
         <button :class="['section-tab', { active: section === 'companies' }]" @click="section = 'companies'">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
@@ -24,26 +23,20 @@
         </button>
       </div>
 
-      <!-- Список компаний -->
       <nav v-if="section === 'companies'" class="nav">
-        <button
-          v-for="c in companies" :key="c.id"
+        <button v-for="c in companies" :key="c.id"
           :class="['nav-item', { active: selectedId === c.id && section === 'companies' }]"
-          @click="selectedId = c.id"
-        >
+          @click="selectedId = c.id">
           <span class="nav-dot" :style="{ background: colorFor(c.id) }"></span>
           <span class="nav-name">{{ c.name }}</span>
         </button>
         <div v-if="!companies.length" class="nav-empty">Нет компаний</div>
       </nav>
 
-      <!-- Список людей -->
       <nav v-else class="nav">
-        <button
-          v-for="p in persons" :key="p.id"
+        <button v-for="p in persons" :key="p.id"
           :class="['nav-item', { active: selectedPersonId === p.id }]"
-          @click="selectedPersonId = p.id"
-        >
+          @click="selectedPersonId = p.id">
           <span class="nav-dot" style="background:#a78bfa"></span>
           <span class="nav-name">{{ p.last_name }} {{ p.first_name }}</span>
         </button>
@@ -148,7 +141,6 @@ import api from './api.js'
 import Dashboard from './components/Dashboard.vue'
 import PersonDashboard from './components/PersonDashboard.vue'
 
-// Простой EmptyState компонент
 const EmptyState = {
   props: ['text'],
   emits: ['add'],
@@ -222,7 +214,6 @@ async function addPerson() {
     fd.append('birth_date', personForm.value.birth_date)
     fd.append('notes',      personForm.value.notes.trim())
     if (photoFile.value) fd.append('photo', photoFile.value)
-
     const p = await api.createPerson(fd)
     persons.value.unshift(p)
     selectedPersonId.value = p.id
@@ -249,20 +240,17 @@ onMounted(() => { loadCompanies(); loadPersons() })
 
 <style scoped>
 .layout { display: flex; height: 100vh; overflow: hidden; }
-
 .sidebar {
   width: 220px; min-width: 220px;
   background: #13151f; border-right: 1px solid #2d3148;
   display: flex; flex-direction: column;
   padding: 20px 12px; gap: 16px;
 }
-
 .logo {
   display: flex; align-items: center; gap: 10px;
   padding: 0 8px; font-size: 18px; font-weight: 700;
   color: #e2e8f0; letter-spacing: -0.02em;
 }
-
 .section-tabs { display: flex; gap: 4px; }
 .section-tab {
   flex: 1; display: flex; align-items: center; justify-content: center;
@@ -273,7 +261,6 @@ onMounted(() => { loadCompanies(); loadPersons() })
 }
 .section-tab:hover { color: #e2e8f0; }
 .section-tab.active { background: #1e2235; color: #e2e8f0; border-color: #6366f1; }
-
 .nav { display: flex; flex-direction: column; gap: 2px; flex: 1; overflow-y: auto; }
 .nav-item {
   display: flex; align-items: center; gap: 10px;
@@ -288,9 +275,7 @@ onMounted(() => { loadCompanies(); loadPersons() })
 .nav-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav-empty { color: #4a5568; font-size: 12px; padding: 8px 10px; }
 .sidebar-footer { margin-top: auto; }
-
 .main { flex: 1; overflow-y: auto; }
-
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.7);
   display: flex; align-items: center; justify-content: center; z-index: 100;
@@ -305,13 +290,9 @@ onMounted(() => { loadCompanies(); loadPersons() })
 .form-group { display: flex; flex-direction: column; gap: 6px; }
 .form-group label { font-size: 12px; color: #94a3b8; font-weight: 500; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
-
 .photo-preview { margin-top: 8px; }
 .photo-preview img {
   width: 80px; height: 80px; border-radius: 8px;
   object-fit: cover; border: 1px solid #2d3148;
 }
-
-.fade-enter-active, .fade-leave-active { transition: opacity 0.2s; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>

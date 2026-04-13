@@ -16,7 +16,6 @@ app.conf.update(
     accept_content=["json"],
     timezone="UTC",
     enable_utc=True,
-    # Автозапуск парсинга каждые 30 минут
     beat_schedule={
         "parse-all-companies": {
             "task": "celery_app.parse_all_companies",
@@ -25,8 +24,6 @@ app.conf.update(
     },
 )
 
-
-# ─── Задача: парсинг одной компании ─────────────────────────────────────────
 
 @app.task(bind=True, max_retries=3, default_retry_delay=60)
 def parse_company_mentions(self, company_id: int, company_name: str, keywords_json: str):
@@ -41,9 +38,7 @@ def parse_company_mentions(self, company_id: int, company_name: str, keywords_js
 
         mentions_data = fetch_mentions(keywords)
 
-        # Сохраняем в БД через sync session
         with Session(sync_engine) as session:
-            # Получаем существующие URL чтобы не дублировать
             existing_urls = set(
                 row[0]
                 for row in session.execute(
@@ -79,8 +74,6 @@ def parse_company_mentions(self, company_id: int, company_name: str, keywords_js
         raise self.retry(exc=exc)
 
 
-# ─── Задача: парсинг всех активных компаний ─────────────────────────────────
-
 @app.task
 def parse_all_companies():
     """Запускает парсинг для всех активных компаний."""
@@ -99,8 +92,6 @@ def parse_all_companies():
             )
 
 
-# ─── Задача: поиск по человеку ───────────────────────────────────────────────
-
 @app.task(bind=True, max_retries=3, default_retry_delay=60)
 def search_person(self, person_id: int, full_name: str, birth_date: str = None, photo_path: str = None):
     """Ищет информацию о человеке из открытых источников."""
@@ -113,16 +104,12 @@ def search_person(self, person_id: int, full_name: str, birth_date: str = None, 
         print(f"[Celery] Поиск человека: {full_name}")
         all_results = []
 
-        # Поиск по имени
         all_results += search_by_name(full_name, birth_date)
 
-        # Поиск по фото если загружено
         if photo_path:
             all_results += reverse_image_search(photo_path)
 
-        # Сохраняем в БД
         with Session(sync_engine) as session:
-            # Удаляем старые результаты
             session.query(PersonResult).filter(
                 PersonResult.person_id == person_id
             ).delete()
